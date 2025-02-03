@@ -109,6 +109,11 @@ mod x86;
 #[cfg(feature = "arch_x86")]
 pub use crate::x86::*;
 
+/// Opaque storage for CPU context.
+/// Used to quickly save and restore cpu state.
+///
+/// Instances of this type are created and used by the context_* functions
+/// on the [Unicorn] struct.
 #[derive(Debug)]
 pub struct Context {
     context: ffi::uc_context,
@@ -132,9 +137,17 @@ impl Drop for Context {
     }
 }
 
+/// Storage for any existing memory mapped I/O callbacks.
+/// Instances of this type are stored in the [UnicornInner::mmio_callbacks] vector.
 pub struct MmioCallbackScope<'a> {
+    /// A list of memory regions that are mapped to this callback,
+    /// stored in (address, size) tuples.
     pub regions: Vec<(u64, usize)>,
+    // The callback for when the memory region is read from.
+    // None if this region is write only.
     pub read_callback: Option<Box<dyn ffi::IsUcHook<'a> + 'a>>,
+    // The callback for when the memory region is written to.
+    // None if this region is read only.
     pub write_callback: Option<Box<dyn ffi::IsUcHook<'a> + 'a>>,
 }
 
@@ -182,21 +195,27 @@ impl<'a> MmioCallbackScope<'a> {
     }
 }
 
+/// An opaque pointer to a unicorn hook callback. Returned by the add_*_hook functions on
+/// [Unicorn] and used to unregister hooks with [Unicorn::remove_hook].
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct UcHookId(ffi::uc_hook);
 
 pub struct UnicornInner<'a, D> {
+    /// An opaque pointer to the unicorn instance.
     pub handle: uc_handle,
+    /// If false, this struct's [UnicornInner::handle] was created in rust and will
+    /// be freed by its [Drop] implementation.
     pub ffi: bool,
+    /// The architecture of the unicorn instance.
     pub arch: Arch,
     /// to keep ownership over the hook for this uc instance's lifetime
     pub hooks: Vec<(UcHookId, Box<dyn ffi::IsUcHook<'a> + 'a>)>,
     /// To keep ownership over the mmio callbacks for this uc instance's lifetime
     pub mmio_callbacks: Vec<MmioCallbackScope<'a>>,
+    /// Accompanying data that is accessible to callbacks
     pub data: D,
 }
 
-/// Drop UC
 impl<'a, D> Drop for UnicornInner<'a, D> {
     fn drop(&mut self) {
         if !self.ffi && !self.handle.is_null() {
@@ -218,6 +237,8 @@ impl<'a> Unicorn<'a, ()> {
         Self::new_with_data(arch, mode, ())
     }
 
+    /// Create a new [Unicorn] value from an existing [uc_handle] pointer.
+    ///
     /// # Safety
     /// The function has to be called with a valid uc_handle pointer
     /// that was previously allocated by a call to uc_open.
@@ -252,6 +273,9 @@ where
 {
     /// Create a new instance of the unicorn engine for the specified architecture
     /// and hardware mode.
+    ///
+    /// Unlike [Unicorn::new], this function allows you to pass in custom data
+    /// that is attatched to the [Unicorn] instance and is accessible to callbacks.
     pub fn new_with_data(arch: Arch, mode: Mode, data: D) -> Result<Unicorn<'a, D>, uc_error> {
         let mut handle = ptr::null_mut();
         unsafe { ffi::uc_open(arch, mode, &mut handle) }.and_then(|| {
@@ -315,6 +339,7 @@ impl<'a, D> Unicorn<'a, D> {
     pub fn mem_regions(&self) -> Result<Vec<MemRegion>, uc_error> {
         let mut nb_regions: u32 = 0;
         let p_regions: *const MemRegion = ptr::null_mut();
+        // TODO: Use slice::from_raw_parts here
         unsafe { ffi::uc_mem_regions(self.get_handle(), &p_regions, &mut nb_regions) }.and_then(
             || {
                 let mut regions = Vec::new();
@@ -352,7 +377,6 @@ impl<'a, D> Unicorn<'a, D> {
     /// likely cause a crash in unicorn.
     ///
     /// `address` must be aligned to 4kb or this will return `Error::ARG`.
-    ///
     /// `size` must be a multiple of 4kb or this will return `Error::ARG`.
     ///
     /// `ptr` is a pointer to the provided memory region that will be used by the emulator.
@@ -531,6 +555,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe { ffi::uc_reg_write(self.get_handle(), regid.into(), value.as_ptr() as _) }.into()
     }
 
+    // TODO: What happens when used with a too large register
     /// Read an unsigned value from a register.
     ///
     /// Not to be used with registers larger than 64 bit.
@@ -540,6 +565,7 @@ impl<'a, D> Unicorn<'a, D> {
             .and(Ok(value))
     }
 
+    // TODO: What happens when used with a smaller register
     /// Read 128, 256 or 512 bit register value into heap allocated byte array.
     ///
     /// This adds safe support for registers >64 bit (GDTR/IDTR, XMM, YMM, ZMM, ST (x86); Q, V (arm64)).
@@ -594,7 +620,19 @@ impl<'a, D> Unicorn<'a, D> {
             .and(Ok(value))
     }
 
-    /// Add a code hook.
+    /// Add a code hook. A code hook is a finer-grained block hook. It is called before each
+    /// instruction is executed. The arguments for `F` are
+    ///
+    /// * A reference to this [Unicorn] instance
+    /// * The address of the instruction
+    /// * The size of the instruction (or 0 when unknown)
+    ///
+    /// The code hook is applied to all code between the `begin` and `end` addresses (both
+    /// inclusive).
+    ///
+    /// Note: this causes a considerable performance hit, as it prevents the QEMU JIT optimizer
+    /// from optimizing basic blocks. Unless the granularity is needed, consider using a block hook
+    /// instead.
     pub fn add_code_hook<F: 'a>(
         &mut self,
         begin: u64,
@@ -628,7 +666,15 @@ impl<'a, D> Unicorn<'a, D> {
         })
     }
 
-    /// Add a block hook.
+    /// Add a block hook. This hook is called whenever execution starts within a "basic block", aka
+    /// a sequence of instructions without any conditional branching, I/O, or other special behavior.
+    ///
+    /// * A reference to this [Unicorn] instance
+    /// * The address of the instruction
+    /// * The size of the instruction (or 0 when unknown)
+    ///
+    /// The code hook is applied to all code between the `begin` and `end` addresses (both
+    /// inclusive).
     pub fn add_block_hook<F: 'a>(
         &mut self,
         begin: u64,
@@ -662,7 +708,30 @@ impl<'a, D> Unicorn<'a, D> {
         })
     }
 
-    /// Add a memory hook.
+    // TODO: Make a new enum for each of these functions.
+    /// Add a memory hook. This hook will be called when a memory access occurs. The types of
+    /// accesses that trigger a callback depends on the value of `hook_type`.
+    ///
+    /// * `MEM_READ`: Called before a read access
+    /// * `MEM_WRITE`: Called before a write access
+    /// * `MEM_READ_AFTER`: Called after a read access (value is populated)
+    /// * `MEM_FETCH_*`: Called when the emulator cannot read memory to load new
+    ///   instructions (due to unmapped, no read, or no execute memory).
+    ///   Note: `MEM_FETCH` with no suffix is deprecated.
+    /// * `MEM_*_UNMAPPED`: Called when memory accesses an unmapped address
+    /// * `MEM_*_PROT`: Called when a memory access occurs that is forbidden by memory
+    ///   protection (e.g. writing to read only memory).
+    ///
+    /// The arguments for the callback are
+    /// * A reference to this [Unicorn] instance
+    /// * The type of access (Read or Write)
+    /// * The address of the access
+    /// * The size of the access (in bytes)
+    /// * The value that is being read/written (indeterminate for MEM_READ hooks)
+    ///
+    /// For the UNMAPPED hook types, the return value should be true if execution should
+    /// continue, or false if it should abort. In order to return true, you need to map
+    /// the memory region being accessed in the callback.
     pub fn add_mem_hook<F: 'a>(
         &mut self,
         hook_type: HookType,
@@ -701,7 +770,12 @@ impl<'a, D> Unicorn<'a, D> {
         })
     }
 
-    /// Add an interrupt hook.
+    /// Add an interrupt hook. This hook will be called when an interrupt occurs.
+    /// This happens because of an interrupt, used for things like invoking a syscall.
+    ///
+    /// The arguments for the callback are
+    /// * A reference to this [Unicorn] instance
+    /// * The interrupt number
     pub fn add_intr_hook<F: 'a>(&mut self, callback: F) -> Result<UcHookId, uc_error>
     where
         F: FnMut(&mut Unicorn<D>, u32),
@@ -730,7 +804,7 @@ impl<'a, D> Unicorn<'a, D> {
         })
     }
 
-    /// Add hook for invalid instructions
+    /// Add hook for invalid instructions.
     pub fn add_insn_invalid_hook<F: 'a>(&mut self, callback: F) -> Result<UcHookId, uc_error>
     where
         F: FnMut(&mut Unicorn<D>) -> bool,
