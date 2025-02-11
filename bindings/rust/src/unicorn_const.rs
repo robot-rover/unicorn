@@ -1,3 +1,7 @@
+//! This module contains the constants and enums used by the Unicorn library.
+//!
+//! Most of its members are directly mapped from the C API.
+
 #![allow(non_camel_case_types)]
 use bitflags::bitflags;
 
@@ -10,31 +14,60 @@ pub const VERSION_EXTRA: u64 = 7;
 pub const SECOND_SCALE: u64 = 1_000_000;
 pub const MILISECOND_SCALE: u64 = 1_000;
 
+/// All errors that can be returned by this libraries API
+/// are mapped to values of this type.
+/// TODO: remap this to be nonzero
+/// TODO: split this type to an error type for each function that can error
 #[repr(C)]
 #[derive(PartialEq, Debug, Clone, Copy)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum uc_error {
+    // TODO: Find the rust equivalent functions for doc comments
+
+    /// No error
     OK = 0,
+    /// Out of memory was returned by the allocator.
+    /// Caused by a call to uc_open() or uc_emulate()
     NOMEM = 1,
+    /// Invalid architecture passed to uc_open()
     ARCH = 2,
+    /// Invalid handle pointer passed
     HANDLE = 3,
+    /// Invalid mode passed to uc_open()
     MODE = 4,
+    /// Unsupported underlying library version
     VERSION = 5,
+    /// uc_emu_start() exitted due to a READ to unmapped memory
     READ_UNMAPPED = 6,
+    /// uc_emu_start() exitted due to a WRITE to unmapped memory
     WRITE_UNMAPPED = 7,
+    /// uc_emu_start() exitted due to a FETCH to unmapped memory
     FETCH_UNMAPPED = 8,
+    /// An invalid hook type was passed to uc_hook_add()
     HOOK = 9,
+    /// uc_emu_start() exitted due to an invalid instruction
     INSN_INVALID = 10,
+    /// uc_mem_map() was passed an invalid memory mapping
     MAP = 11,
+    /// uc_emu_start() exitted due to a write to non-writable memory
     WRITE_PROT = 12,
+    /// uc_emu_start() exitted due to a read from non-readable memory
     READ_PROT = 13,
+    /// uc_emu_start() exitted due to a fetch from non-readable memory
     FETCH_PROT = 14,
+    /// Invalid argument passed to a function
     ARG = 15,
+    /// uc_emu_start() exitted due to an insufficiently aligned read
     READ_UNALIGNED = 16,
+    /// uc_emu_start() exitted due to an insufficiently aligned write
     WRITE_UNALIGNED = 17,
+    /// uc_emu_start() exitted due to an insufficiently aligned fetch
     FETCH_UNALIGNED = 18,
+    /// A hook for the requested event already exists
     HOOK_EXIST = 19,
+    /// TODO: what does "insufficient resource: uc_emu_start()" mean
     RESOURCE = 20,
+    /// uc_emu_start() exitted due to an exception that has no assigned handler
     EXCEPTION = 21,
 }
 
@@ -71,29 +104,50 @@ impl From<uc_error> for Result<(), uc_error> {
     }
 }
 
+/// The types of memory accesses that can be monitored with a hook via
+/// TODO: Find rust equivalent of UC_HOOK_MEM_
 #[repr(C)]
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum MemType {
+    /// Memory is read from
     READ = 16,
+    /// Memory is written to
     WRITE = 17,
+    /// Memory is fetched
     FETCH = 18,
+    /// Unmapped memory is read from
     READ_UNMAPPED = 19,
+    /// Unmapped memory is written to
     WRITE_UNMAPPED = 20,
+    /// Unmapped memory is fetched
     FETCH_UNMAPPED = 21,
+    /// Non-writeable (but mapped) memory is written to
     WRITE_PROT = 22,
+    /// Non-readable (but mapped) memory is read
     READ_PROT = 23,
+    /// Non-readable (but mapped) memory is fetched
     FETCH_PROT = 24,
+    /// Memory is read from (called after the read value is available)
     READ_AFTER = 25,
 }
 
+/// The types of TLBs that can be emulated
 #[repr(C)]
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum TlbType {
+    // TODO: Grammar
+    /// The default unicorn virtuall TLB implementation.
+    /// The tlb implementation of the CPU, best to use for full system emulation.
     CPU = 0,
+    // TODO: What does the hook do?
+    /// This tlb defaults to virtuall address == physical address
+    /// Also a hook is availible to override the tlb entries (see
+    /// uc_cb_tlbevent_t).
     VIRTUAL = 1,
 }
 
 bitflags! {
+    /// A bitfield that represents the different hook types that can be registered with the emulator.
     #[repr(C)]
     #[derive(Copy, Clone)]
     pub struct HookType: i32 {
@@ -154,11 +208,16 @@ pub struct Permission : u32 {
     }
 }
 
+/// Represents a region of memory that is mapped and has certain access permissions.
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct MemRegion {
+    /// The address that the region begins at (inclusive).
     pub begin: u64,
+    /// The address that the region begins at (inclusive).
+    /// TODO: Inclusive?
     pub end: u64,
+    /// The access permissions of the region (can it be read, written, and executed).
     pub perms: Permission,
 }
 
@@ -241,23 +300,16 @@ pub struct TranslationBlock {
     pub size: u16,
 }
 
-// TODO: Change these to be functions
-macro_rules! UC_CTL_READ {
-    ($expr:expr) => {
-        $expr as u32 | ControlType::UC_CTL_IO_READ as u32
-    };
+pub(crate) fn uc_ctl_read(ct: ControlType) -> u32 {
+    ct as u32 | ControlType::UC_CTL_IO_READ as u32
 }
 
-macro_rules! UC_CTL_WRITE {
-    ($expr:expr) => {
-        $expr as u32 | ControlType::UC_CTL_IO_WRITE as u32
-    };
+pub(crate) fn uc_ctl_write(ct: ControlType) -> u32 {
+    ct as u32 | ControlType::UC_CTL_IO_WRITE as u32
 }
 
-macro_rules! UC_CTL_READ_WRITE {
-    ($expr:expr) => {
-        $expr as u32 | ControlType::UC_CTL_IO_WRITE as u32 | ControlType::UC_CTL_IO_READ as u32
-    };
+pub(crate) fn uc_ctl_read_write(ct: ControlType) -> u32 {
+    ct as u32  | ControlType::UC_CTL_IO_WRITE as u32 | ControlType::UC_CTL_IO_READ as u32
 }
 
 #[allow(clippy::upper_case_acronyms)]

@@ -1143,7 +1143,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_READ!(ControlType::UC_CTL_UC_MODE),
+                uc_ctl_read(ControlType::UC_CTL_UC_MODE),
                 &mut result,
             )
         }
@@ -1156,7 +1156,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_READ!(ControlType::UC_CTL_UC_PAGE_SIZE),
+                uc_ctl_read(ControlType::UC_CTL_UC_PAGE_SIZE),
                 &mut result,
             )
         }
@@ -1168,7 +1168,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_UC_PAGE_SIZE),
+                uc_ctl_write(ControlType::UC_CTL_UC_PAGE_SIZE),
                 page_size,
             )
         }
@@ -1181,7 +1181,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_READ!(ControlType::UC_CTL_UC_ARCH),
+                uc_ctl_read(ControlType::UC_CTL_UC_ARCH),
                 &mut result,
             )
         }
@@ -1194,7 +1194,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_READ!(ControlType::UC_CTL_UC_TIMEOUT),
+                uc_ctl_read(ControlType::UC_CTL_UC_TIMEOUT),
                 &mut result,
             )
         }
@@ -1206,7 +1206,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_UC_USE_EXITS),
+                uc_ctl_write(ControlType::UC_CTL_UC_USE_EXITS),
                 1,
             )
         }
@@ -1217,7 +1217,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_UC_USE_EXITS),
+                uc_ctl_write(ControlType::UC_CTL_UC_USE_EXITS),
                 0,
             )
         }
@@ -1229,7 +1229,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_READ!(ControlType::UC_CTL_UC_EXITS_CNT),
+                uc_ctl_read(ControlType::UC_CTL_UC_EXITS_CNT),
                 &mut result,
             )
         }
@@ -1242,7 +1242,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_READ!(ControlType::UC_CTL_UC_EXITS),
+                uc_ctl_read(ControlType::UC_CTL_UC_EXITS),
                 exits.as_mut_ptr(),
                 exits_count,
             )
@@ -1257,7 +1257,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_UC_EXITS),
+                uc_ctl_write(ControlType::UC_CTL_UC_EXITS),
                 exits.as_ptr(),
                 exits.len() as libc::size_t,
             )
@@ -1271,7 +1271,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_READ!(ControlType::UC_CTL_CPU_MODEL),
+                uc_ctl_read(ControlType::UC_CTL_CPU_MODEL),
                 &mut result,
             )
         }
@@ -1283,7 +1283,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_CPU_MODEL),
+                uc_ctl_write(ControlType::UC_CTL_CPU_MODEL),
                 cpu_model,
             )
         }
@@ -1296,7 +1296,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_TB_REMOVE_CACHE),
+                uc_ctl_write(ControlType::UC_CTL_TB_REMOVE_CACHE),
                 address,
                 end,
             )
@@ -1314,7 +1314,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_READ_WRITE!(ControlType::UC_CTL_TB_REQUEST_CACHE),
+                uc_ctl_read_write(ControlType::UC_CTL_TB_REQUEST_CACHE),
                 address,
                 tb,
             )
@@ -1327,7 +1327,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_TB_FLUSH),
+                uc_ctl_write(ControlType::UC_CTL_TB_FLUSH),
             )
         }
         .into()
@@ -1338,7 +1338,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_TLB_FLUSH),
+                uc_ctl_write(ControlType::UC_CTL_TLB_FLUSH),
             )
         }
         .into()
@@ -1349,7 +1349,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_CONTEXT_MODE),
+                uc_ctl_write(ControlType::UC_CTL_CONTEXT_MODE),
                 mode,
             )
         }
@@ -1361,7 +1361,7 @@ impl<'a, D> Unicorn<'a, D> {
         unsafe {
             ffi::uc_ctl(
                 self.get_handle(),
-                UC_CTL_WRITE!(ControlType::UC_CTL_TLB_TYPE),
+                uc_ctl_write(ControlType::UC_CTL_TLB_TYPE),
                 t as i32,
             )
         }
