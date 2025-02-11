@@ -804,7 +804,13 @@ impl<'a, D> Unicorn<'a, D> {
         })
     }
 
-    /// Add hook for invalid instructions.
+    /// Add hook for invalid instructions. This hook is called when the emulator
+    /// encounters an instruction that is not a legal opcode.
+    ///
+    /// The arguments for the callback are
+    /// * A reference to this [Unicorn] instance
+    ///
+    /// The return value is whether execution should continue (true) or abort (false)
     pub fn add_insn_invalid_hook<F: 'a>(&mut self, callback: F) -> Result<UcHookId, uc_error>
     where
         F: FnMut(&mut Unicorn<D>) -> bool,
@@ -833,7 +839,15 @@ impl<'a, D> Unicorn<'a, D> {
         })
     }
 
-    /// Add hook for x86 IN instruction.
+    /// Add hook for x86 IN instruction. This hook is called when the emulator encounters an x86 IN
+    /// instruction.
+    ///
+    /// The arguments for the callback are
+    /// * A reference to this [Unicorn] instance
+    /// * The port number
+    /// * the data size to be read from this port, in bytes (1/2/4)
+    ///
+    /// The return value is the data read from the port.
     #[cfg(feature = "arch_x86")]
     pub fn add_insn_in_hook<F: 'a>(&mut self, callback: F) -> Result<UcHookId, uc_error>
     where
@@ -864,7 +878,14 @@ impl<'a, D> Unicorn<'a, D> {
         })
     }
 
-    /// Add hook for x86 OUT instruction.
+    /// Add hook for x86 OUT instruction. This hook is called when the emulator encounters an x86 OUT
+    /// instruction.
+    ///
+    /// The arguments for the callback are
+    /// * A reference to this [Unicorn] instance
+    /// * The port number
+    /// * The data size to be written from this port, in bytes (1/2/4)
+    /// * The data to be written to the port
     #[cfg(feature = "arch_x86")]
     pub fn add_insn_out_hook<F: 'a>(&mut self, callback: F) -> Result<UcHookId, uc_error>
     where
@@ -895,7 +916,11 @@ impl<'a, D> Unicorn<'a, D> {
         })
     }
 
-    /// Add hook for x86 SYSCALL or SYSENTER.
+    /// Add hook for x86 SYSCALL or SYSENTER. This hook will be called when an the emulator
+    /// encounters either instruction.
+    ///
+    /// The arguments for the callback are
+    /// * A reference to this [Unicorn] instance
     #[cfg(feature = "arch_x86")]
     pub fn add_insn_sys_hook<F>(
         &mut self,
@@ -932,6 +957,16 @@ impl<'a, D> Unicorn<'a, D> {
         })
     }
 
+
+    /// Add hook for a TLB lookup. This hook will be called when an the emulator
+    /// needs to de-virtualize a memory address.
+    ///
+    /// The arguments for the callback are
+    /// * A reference to this [Unicorn] instance
+    /// * The virtual address to lookup
+    /// * The mode of the access
+    ///
+    /// The return value is a TLB entry for the address.
     pub fn add_tlb_hook<F>(
         &mut self,
         begin: u64,
@@ -1023,6 +1058,7 @@ impl<'a, D> Unicorn<'a, D> {
 
     /// Emulate machine code for a specified duration.
     ///
+    /// TODO: What happens when until is begin (infinite?)
     /// `begin` is the address where to start the emulation. The emulation stops if `until`
     /// is hit. `timeout` specifies a duration in microseconds after which the emulation is
     /// stopped (infinite execution if set to 0). `count` is the maximum number of instructions
@@ -1101,6 +1137,8 @@ impl<'a, D> Unicorn<'a, D> {
         self.reg_write(Self::arch_to_pc_register(arch)?, value)
     }
 
+    /// Returns the current mode of the emulator. This includes endianness
+    /// and architecture extensions.
     pub fn ctl_get_mode(&self) -> Result<Mode, uc_error> {
         let mut result: i32 = Default::default();
         unsafe {
@@ -1113,6 +1151,7 @@ impl<'a, D> Unicorn<'a, D> {
         .and_then(|| Ok(Mode::from_bits_truncate(result)))
     }
 
+    /// Returns the current page size of the emulator (in bytes).
     pub fn ctl_get_page_size(&self) -> Result<u32, uc_error> {
         let mut result: u32 = Default::default();
         unsafe {
@@ -1125,6 +1164,7 @@ impl<'a, D> Unicorn<'a, D> {
         .and_then(|| Ok(result))
     }
 
+    /// Sets the current page size of the emulator (in bytes).
     pub fn ctl_set_page_size(&self, page_size: u32) -> Result<(), uc_error> {
         unsafe {
             ffi::uc_ctl(
@@ -1136,6 +1176,7 @@ impl<'a, D> Unicorn<'a, D> {
         .into()
     }
 
+    // TODO: Why does this exist when we have `get_arch`?
     pub fn ctl_get_arch(&self) -> Result<Arch, uc_error> {
         let mut result: i32 = Default::default();
         unsafe {
@@ -1148,6 +1189,7 @@ impl<'a, D> Unicorn<'a, D> {
         .and_then(|| Arch::try_from(result as usize))
     }
 
+    // TODO: What is this timeout
     pub fn ctl_get_timeout(&self) -> Result<u64, uc_error> {
         let mut result: u64 = Default::default();
         unsafe {
@@ -1160,6 +1202,7 @@ impl<'a, D> Unicorn<'a, D> {
         .and(Ok(result))
     }
 
+    // TODO: What are "exits"
     pub fn ctl_exits_enable(&self) -> Result<(), uc_error> {
         unsafe {
             ffi::uc_ctl(
@@ -1223,6 +1266,7 @@ impl<'a, D> Unicorn<'a, D> {
         .into()
     }
 
+    // TODO: Make this return an enum
     pub fn ctl_get_cpu_model(&self) -> Result<i32, uc_error> {
         let mut result: i32 = Default::default();
         unsafe {
@@ -1235,6 +1279,7 @@ impl<'a, D> Unicorn<'a, D> {
         .and(Ok(result))
     }
 
+    // TODO: Make this take an enum
     pub fn ctl_set_cpu_model(&self, cpu_model: i32) -> Result<(), uc_error> {
         unsafe {
             ffi::uc_ctl(
@@ -1246,6 +1291,8 @@ impl<'a, D> Unicorn<'a, D> {
         .into()
     }
 
+    /// Invalidate a tb cache at a specified address
+    /// TODO: What is "end"
     pub fn ctl_remove_cache(&self, address: u64, end: u64) -> Result<(), uc_error> {
         unsafe {
             ffi::uc_ctl(
@@ -1258,6 +1305,8 @@ impl<'a, D> Unicorn<'a, D> {
         .into()
     }
 
+    /// Create a tb cache at the specified address
+    /// TODO: What does "tb" do
     pub fn ctl_request_cache(
         &self,
         address: u64,
@@ -1274,6 +1323,7 @@ impl<'a, D> Unicorn<'a, D> {
         .into()
     }
 
+    /// Invalidate all translation blocks
     pub fn ctl_flush_tb(&self) -> Result<(), uc_error> {
         unsafe {
             ffi::uc_ctl(
@@ -1284,6 +1334,7 @@ impl<'a, D> Unicorn<'a, D> {
         .into()
     }
 
+    /// Invalidate all tlb cache entries and translation blocks
     pub fn ctl_flush_tlb(&self) -> Result<(), uc_error> {
         unsafe {
             ffi::uc_ctl(
@@ -1294,6 +1345,7 @@ impl<'a, D> Unicorn<'a, D> {
         .into()
     }
 
+    // TODO: "control if context_save/restore should work with snapshots"
     pub fn ctl_context_mode(&self, mode: ContextMode) -> Result<(), uc_error> {
         unsafe {
             ffi::uc_ctl(
@@ -1305,6 +1357,7 @@ impl<'a, D> Unicorn<'a, D> {
         .into()
     }
 
+    /// Change the current tlb implementation
     pub fn ctl_tlb_type(&self, t: TlbType) -> Result<(), uc_error> {
         unsafe {
             ffi::uc_ctl(

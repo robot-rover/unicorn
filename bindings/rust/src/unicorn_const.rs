@@ -241,6 +241,7 @@ pub struct TranslationBlock {
     pub size: u16,
 }
 
+// TODO: Change these to be functions
 macro_rules! UC_CTL_READ {
     ($expr:expr) => {
         $expr as u32 | ControlType::UC_CTL_IO_READ as u32
