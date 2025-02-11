@@ -673,8 +673,7 @@ fn mem_map_ptr() {
     assert_eq!(emu.mem_unmap(0x1000, 0x4000), Ok(()));
 
     // Use a Vec for the emulator memory.
-    let mut mem: Vec<u8> = Vec::new();
-    mem.reserve(4000);
+    let mut mem: Vec<u8> = Vec::with_capacity(4000);
 
     // Attempt to write to memory before mapping it.
     assert_eq!(
@@ -775,8 +774,6 @@ fn x86_block_callback() {
 
 #[test]
 fn x86_tlb_callback() {
-    #[derive(PartialEq, Debug)]
-    struct BlockExpectation(u64, u32);
     let expects:u64 = 4;
     let count: u64 = 0;
     let count_cell = Rc::new(RefCell::new(count));
@@ -785,7 +782,7 @@ fn x86_tlb_callback() {
     let tlb_callback = move |_: &mut Unicorn<'_, ()>, address: u64, _: MemType| -> Option<TlbEntry> {
         let mut blocks = callback_counter.borrow_mut();
         *blocks += 1;
-        return Some(TlbEntry{paddr: address, perms: Permission::ALL});
+        Some(TlbEntry{paddr: address, perms: Permission::ALL})
     };
 
     let syscall_callback = move |uc:  &mut Unicorn<'_, ()>| {

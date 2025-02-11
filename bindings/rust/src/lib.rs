@@ -151,7 +151,7 @@ pub struct MmioCallbackScope<'a> {
     pub write_callback: Option<Box<dyn ffi::IsUcHook<'a> + 'a>>,
 }
 
-impl<'a> MmioCallbackScope<'a> {
+impl MmioCallbackScope<'_> {
     fn has_regions(&self) -> bool {
         !self.regions.is_empty()
     }
@@ -216,7 +216,7 @@ pub struct UnicornInner<'a, D> {
     pub data: D,
 }
 
-impl<'a, D> Drop for UnicornInner<'a, D> {
+impl<D> Drop for UnicornInner<'_, D> {
     fn drop(&mut self) {
         if !self.ffi && !self.handle.is_null() {
             unsafe { ffi::uc_close(self.handle) };
@@ -293,7 +293,7 @@ where
     }
 }
 
-impl<'a, D> core::fmt::Debug for Unicorn<'a, D> {
+impl<D> core::fmt::Debug for Unicorn<'_, D> {
     fn fmt(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(formatter, "Unicorn {{ uc: {:p} }}", self.get_handle())
     }
@@ -407,7 +407,7 @@ impl<'a, D> Unicorn<'a, D> {
     ///
     /// `address` must be aligned to 4kb or this will return `Error::ARG`.
     /// `size` must be a multiple of 4kb or this will return `Error::ARG`.
-    pub fn mmio_map<R: 'a, W: 'a>(
+    pub fn mmio_map<R, W>(
         &mut self,
         address: u64,
         size: libc::size_t,
@@ -415,8 +415,8 @@ impl<'a, D> Unicorn<'a, D> {
         write_callback: Option<W>,
     ) -> Result<(), uc_error>
     where
-        R: FnMut(&mut Unicorn<D>, u64, usize) -> u64,
-        W: FnMut(&mut Unicorn<D>, u64, usize, u64),
+        R: FnMut(&mut Unicorn<D>, u64, usize) -> u64 + 'a,
+        W: FnMut(&mut Unicorn<D>, u64, usize, u64) + 'a,
     {
         let mut read_data = read_callback.map(|c| {
             Box::new(ffi::UcHook {
@@ -471,14 +471,14 @@ impl<'a, D> Unicorn<'a, D> {
     ///
     /// `address` must be aligned to 4kb or this will return `Error::ARG`.
     /// `size` must be a multiple of 4kb or this will return `Error::ARG`.
-    pub fn mmio_map_ro<F: 'a>(
+    pub fn mmio_map_ro<F>(
         &mut self,
         address: u64,
         size: libc::size_t,
         callback: F,
     ) -> Result<(), uc_error>
     where
-        F: FnMut(&mut Unicorn<D>, u64, usize) -> u64,
+        F: FnMut(&mut Unicorn<D>, u64, usize) -> u64 + 'a,
     {
         self.mmio_map(
             address,
@@ -492,14 +492,14 @@ impl<'a, D> Unicorn<'a, D> {
     ///
     /// `address` must be aligned to 4kb or this will return `Error::ARG`.
     /// `size` must be a multiple of 4kb or this will return `Error::ARG`.
-    pub fn mmio_map_wo<F: 'a>(
+    pub fn mmio_map_wo<F>(
         &mut self,
         address: u64,
         size: libc::size_t,
         callback: F,
     ) -> Result<(), uc_error>
     where
-        F: FnMut(&mut Unicorn<D>, u64, usize, u64),
+        F: FnMut(&mut Unicorn<D>, u64, usize, u64) + 'a,
     {
         self.mmio_map(
             address,
@@ -633,7 +633,7 @@ impl<'a, D> Unicorn<'a, D> {
     /// Note: this causes a considerable performance hit, as it prevents the QEMU JIT optimizer
     /// from optimizing basic blocks. Unless the granularity is needed, consider using a block hook
     /// instead.
-    pub fn add_code_hook<F: 'a>(
+    pub fn add_code_hook<F>(
         &mut self,
         begin: u64,
         end: u64,
@@ -675,14 +675,14 @@ impl<'a, D> Unicorn<'a, D> {
     ///
     /// The code hook is applied to all code between the `begin` and `end` addresses (both
     /// inclusive).
-    pub fn add_block_hook<F: 'a>(
+    pub fn add_block_hook<F>(
         &mut self,
         begin: u64,
         end: u64,
         callback: F,
     ) -> Result<UcHookId, uc_error>
     where
-        F: FnMut(&mut Unicorn<D>, u64, u32),
+        F: FnMut(&mut Unicorn<D>, u64, u32) + 'a,
     {
         let mut hook_id = ptr::null_mut();
         let mut user_data = Box::new(ffi::UcHook {
@@ -732,7 +732,7 @@ impl<'a, D> Unicorn<'a, D> {
     /// For the UNMAPPED hook types, the return value should be true if execution should
     /// continue, or false if it should abort. In order to return true, you need to map
     /// the memory region being accessed in the callback.
-    pub fn add_mem_hook<F: 'a>(
+    pub fn add_mem_hook<F>(
         &mut self,
         hook_type: HookType,
         begin: u64,
@@ -740,7 +740,7 @@ impl<'a, D> Unicorn<'a, D> {
         callback: F,
     ) -> Result<UcHookId, uc_error>
     where
-        F: FnMut(&mut Unicorn<D>, MemType, u64, usize, i64) -> bool,
+        F: FnMut(&mut Unicorn<D>, MemType, u64, usize, i64) -> bool + 'a,
     {
         if !(HookType::MEM_ALL | HookType::MEM_READ_AFTER).contains(hook_type) {
             return Err(uc_error::ARG);
@@ -776,9 +776,9 @@ impl<'a, D> Unicorn<'a, D> {
     /// The arguments for the callback are
     /// * A reference to this [Unicorn] instance
     /// * The interrupt number
-    pub fn add_intr_hook<F: 'a>(&mut self, callback: F) -> Result<UcHookId, uc_error>
+    pub fn add_intr_hook<F>(&mut self, callback: F) -> Result<UcHookId, uc_error>
     where
-        F: FnMut(&mut Unicorn<D>, u32),
+        F: FnMut(&mut Unicorn<D>, u32) + 'a,
     {
         let mut hook_id = ptr::null_mut();
         let mut user_data = Box::new(ffi::UcHook {
@@ -811,9 +811,9 @@ impl<'a, D> Unicorn<'a, D> {
     /// * A reference to this [Unicorn] instance
     ///
     /// The return value is whether execution should continue (true) or abort (false)
-    pub fn add_insn_invalid_hook<F: 'a>(&mut self, callback: F) -> Result<UcHookId, uc_error>
+    pub fn add_insn_invalid_hook<F>(&mut self, callback: F) -> Result<UcHookId, uc_error>
     where
-        F: FnMut(&mut Unicorn<D>) -> bool,
+        F: FnMut(&mut Unicorn<D>) -> bool + 'a,
     {
         let mut hook_id = ptr::null_mut();
         let mut user_data = Box::new(ffi::UcHook {
@@ -849,9 +849,9 @@ impl<'a, D> Unicorn<'a, D> {
     ///
     /// The return value is the data read from the port.
     #[cfg(feature = "arch_x86")]
-    pub fn add_insn_in_hook<F: 'a>(&mut self, callback: F) -> Result<UcHookId, uc_error>
+    pub fn add_insn_in_hook<F>(&mut self, callback: F) -> Result<UcHookId, uc_error>
     where
-        F: FnMut(&mut Unicorn<D>, u32, usize) -> u32,
+        F: FnMut(&mut Unicorn<D>, u32, usize) -> u32 + 'a,
     {
         let mut hook_id = ptr::null_mut();
         let mut user_data = Box::new(ffi::UcHook {
@@ -887,9 +887,9 @@ impl<'a, D> Unicorn<'a, D> {
     /// * The data size to be written from this port, in bytes (1/2/4)
     /// * The data to be written to the port
     #[cfg(feature = "arch_x86")]
-    pub fn add_insn_out_hook<F: 'a>(&mut self, callback: F) -> Result<UcHookId, uc_error>
+    pub fn add_insn_out_hook<F>(&mut self, callback: F) -> Result<UcHookId, uc_error>
     where
-        F: FnMut(&mut Unicorn<D>, u32, usize, u32),
+        F: FnMut(&mut Unicorn<D>, u32, usize, u32) + 'a,
     {
         let mut hook_id = ptr::null_mut();
         let mut user_data = Box::new(ffi::UcHook {
@@ -1039,9 +1039,8 @@ impl<'a, D> Unicorn<'a, D> {
                     .and(Ok(Context {
                         context: new_context,
                     }))
-                    .map_err(|e| {
+                    .inspect_err(|_| {
                         ffi::uc_context_free(new_context);
-                        e
                     })
             })
         }
